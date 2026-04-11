@@ -43,3 +43,16 @@ class EvaluationResult(BaseModel):
     errors: list[str] = Field(default_factory=list)
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+
+class ValidationReportResponse(BaseModel):
+    """
+    Public-facing validation report for a single generated dossier.
+    """
+    compliance_score: int
+    verdict: str
+    sections_compliant: list[str]
+    sections_missing: list[str]
+    critical_flags: list[str]
+    weak_points: list[str]
+    recommendations: list[str]
