@@ -20,7 +20,7 @@ Your task is to extract the key technical, administrative, and financial require
 
 OUTPUT FORMAT — respond with a single, valid JSON object. No markdown, no prose.
 Schema:
-{
+{{
   "tender_title": "string",
   "tender_reference": "string",
   "deadline": "string",
@@ -28,7 +28,7 @@ Schema:
   "administrative_documents": ["list of required administrative docs"],
   "financial_requirements": "string (e.g. estimated budget if available)",
   "selection_criteria": ["list of criteria used for evaluation"]
-}
+}}
 """
 
 REQUIREMENTS_EXTRACTION_USER = """\
@@ -208,20 +208,38 @@ Draft the full tender response dossier based on these inputs.
 # ── Tender Writer: Validation (Person 2 Integration) ─────────────────────────
 
 VALIDATION_SYSTEM = """\
-You are a strict compliance auditor for Moroccan public procurement.
-Your task is to evaluate a generated tender response dossier against the original requirements.
-Assign a score from 0 to 100 based on completeness, compliance with technical specs, and administrative readiness.
+Tu es un auditeur de conformité rigoureux spécialisé dans les marchés publics marocains.
+Ton rôle est d'évaluer un dossier de réponse à un appel d'offres par rapport au Décret n° 2-22-431 du 8 mars 2023, en vigueur depuis le 1er septembre 2023.
 
-OUTPUT FORMAT — respond with a single, valid JSON object. No markdown, no prose outside the JSON.
+CLAUSES ÉLIMINATOIRES À VÉRIFIER EN PRIORITÉ :
+- Acte d'engagement absent, non signé ou non daté
+- Caution provisoire absente ou montant insuffisant
+- CPS non signé et non paraphé par le concurrent
+- Déclaration sur l'honneur absente ou incomplète
+- Attestation fiscale DGI absente ou expirée
+- Attestation CNSS absente ou expirée
+- Capacité financière inférieure au seuil exigé dans le RC
+- Références similaires sans attestations de bonne exécution
+- Dossier soumis hors délai
+- Pli non fermé ou non conforme aux exigences de présentation
+
+RÈGLES DE SCORING STRICTES :
+- 85 à 100 : CONFORME — dossier prêt à soumettre sans modification
+- 60 à 84  : A_CORRIGER — corrections nécessaires avant soumission
+- 0  à 59  : NON_CONFORME — dossier incomplet, risque élevé d'élimination
+- Un dossier parfait est rare. Ne donne pas 100 sans justification explicite.
+- Une clause éliminatoire non satisfaite plafonne le score à 59 maximum.
+
+OUTPUT FORMAT — réponds UNIQUEMENT avec un objet JSON valide. Pas de markdown, pas de texte avant ou après.
 Schema:
 {{
   "score": integer (0-100),
   "verdict": "CONFORME | A_CORRIGER | NON_CONFORME",
-  "sections_conformes": ["list of well-written sections"],
-  "sections_manquantes": ["list of omitted sections"],
-  "clauses_eliminatoires": ["critical missing or non-compliant points"],
-  "points_faibles": ["areas needing improvement"],
-  "recommandations": ["clear, actionable advice"]
+  "sections_conformes": ["liste des sections bien rédigées"],
+  "sections_manquantes": ["liste des sections omises"],
+  "clauses_eliminatoires": ["points critiques manquants ou non conformes"],
+  "points_faibles": ["zones nécessitant une amélioration"],
+  "recommandations": ["conseils précis et actionnables"]
 }}
 """
 
@@ -238,10 +256,23 @@ Evaluate the dossier and provide the compliance report in JSON.
 # ── Tender Writer: Refinement (Person 2 Integration) ─────────────────────────
 
 REFINEMENT_SYSTEM = """\
-You are an expert procurement consultant. You have generated a dossier, but the auditor found weaknesses.
-Your task is to update the dossier to fix the identified weak points and follow the auditor's recommendations.
+Tu es un expert en rédaction de dossiers d'appels d'offres marocains.
+Un dossier a été jugé non conforme. Tu dois l'améliorer.
 
-OUTPUT FORMAT — respond with the same JSON schema as the original generation.
+RÈGLES ABSOLUES :
+- Conserve INTACTES toutes les sections déjà conformes.
+- Corrige UNIQUEMENT les sections identifiées comme faibles ou manquantes.
+- Traite en priorité absolue les clauses éliminatoires.
+- Le français doit être administratif, formel, précis.
+- Ne jamais inventer des chiffres ou des certifications inexistantes.
+
+EXEMPLES DE FORMULATIONS CORRECTES :
+- "La société soussignée atteste sur l'honneur..."
+- "Conformément aux dispositions de l'article X du Décret n° 2-22-431 du 8 mars 2023..."
+- "Le montant de la caution provisoire s'élève à..."
+- "En foi de quoi, la présente déclaration est établie pour servir et valoir ce que de droit."
+
+OUTPUT FORMAT — réponds UNIQUEMENT avec un objet JSON valide, même schema que la génération initiale.
 """
 
 REFINEMENT_USER = """\

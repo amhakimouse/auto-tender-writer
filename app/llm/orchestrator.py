@@ -1,3 +1,9 @@
+"""
+app/llm/orchestrator.py
+
+The Orchestrator — combines raw LLM calls with Pydantic validation.
+"""
+
 import json
 import re
 from loguru import logger
@@ -5,157 +11,121 @@ from pydantic import ValidationError
 
 from app.llm import client, prompts
 from app.schemas.llm_output import ValidationReportLLM
+from app.schemas.llm_schemas import ComplianceChecklist, TechnicalScore
 from app.core.config import settings
 
 # ── Person 1 — Generation Logic ──────────────────────────────────────────────
 
 async def extract_requirements(document_text: str) -> dict:
-    """
-    Person 1A: Extract structured requirements from tender PDF text.
-    Uses Gemini for high-accuracy extraction.
-    """
-    logger.info("Extracting requirements from document text...")
-    
-    raw_response = await client.call_llm(
+    """Person 1A: Extract requirements from tender text."""
+    raw = await client.call_llm(
         system_prompt=prompts.REQUIREMENTS_EXTRACTION_SYSTEM,
         user_message=prompts.REQUIREMENTS_EXTRACTION_USER.format(document_text=document_text),
         model=settings.GEMINI_MODEL,
         response_format="json"
     )
-    
-    try:
-        return _safe_parse_json(raw_response)
-    except Exception as e:
-        logger.error("Failed to parse requirements JSON: {error}", error=str(e))
-        return {"error": "Failed to parse requirements", "raw": raw_response}
+    return _safe_parse_json(raw)
 
 async def generate_dossier(requirements: dict, profile: dict) -> dict:
-    """
-    Person 1B: Generate a compliant tender response dossier.
-    Uses Gemini for high-quality administrative French generation.
-    """
-    logger.info("Generating tender dossier draft...")
-    
+    """Person 1B: Generate a tender response dossier."""
     user_message = prompts.TENDER_GENERATION_USER.format(
-        requirements_json=json.dumps(requirements, indent=2),
-        profile_json=json.dumps(profile, indent=2)
+        requirements_json=json.dumps(requirements),
+        profile_json=json.dumps(profile)
     )
-    
-    raw_response = await client.call_llm(
+    raw = await client.call_llm(
         system_prompt=prompts.TENDER_GENERATION_SYSTEM,
         user_message=user_message,
         model=settings.GEMINI_MODEL,
         response_format="json"
     )
-    
-    try:
-        return _safe_parse_json(raw_response)
-    except Exception as e:
-        logger.error("Failed to parse dossier JSON: {error}", error=str(e))
-        raise RuntimeError(f"Dossier generation failed: {str(e)}")
+    return _safe_parse_json(raw)
 
 
-# ── Person 2 — Dossier Validation & Refinement ───────────────────────────────
+# ── Person 2 — Validation (Writer Journey) ───────────────────────────────────
 
-async def validate_dossier(
-    requirements: dict,
-    dossier: dict,
-) -> ValidationReportLLM:
-    """
-    Person 2 — Phase: Dossier Compliance Validation.
-    Uses the specialized Featherless/Qwen/Mistral backend for strict audit.
-    """
+async def validate_dossier(requirements: dict, dossier: dict) -> ValidationReportLLM:
+    """Person 2: Validate live dossier."""
     system = prompts.VALIDATION_SYSTEM
     user = prompts.VALIDATION_USER.format(
-        requirements=json.dumps(requirements, ensure_ascii=False, indent=2),
-        dossier=json.dumps(dossier, ensure_ascii=False, indent=2),
+        requirements=json.dumps(requirements),
+        dossier=json.dumps(dossier)
     )
-
-    logger.debug("LLM validation call triggered → model={m}", m=settings.FEATHERLESS_MODEL)
-
     raw = await client.call_llm(
         system_prompt=system,
         user_message=user,
         model=settings.FEATHERLESS_MODEL,
-        temperature=0.0,   # deterministic for validation
-        response_format="json",
+        response_format="json"
     )
+    data = _safe_parse_json(raw)
+    return ValidationReportLLM(**data)
 
-    try:
-        data = _safe_parse_json(raw)
-        report = ValidationReportLLM(**data)
-        return report
-    except (json.JSONDecodeError, ValidationError) as exc:
-        logger.error("LLM validation output failed check: {err}", err=str(exc))
-        raise ValueError(f"LLM returned invalid validation JSON: {exc}") from exc
-
-async def refine_dossier_specialized(
-    dossier: dict,
-    validation_report: ValidationReportLLM,
-    requirements: dict,
-) -> dict:
-    """
-    Person 2 — Refinement pass (triggered when score is low).
-    Uses the Featherless backend to fix specific compliance issues.
-    """
-    system = prompts.REFINEMENT_SYSTEM
+async def refine_dossier_specialized(dossier: dict, report: ValidationReportLLM, requirements: dict) -> dict:
+    """Person 2: Refine dossier based on auditor feedback."""
     user = prompts.REFINEMENT_USER.format(
-        dossier=json.dumps(dossier, ensure_ascii=False, indent=2),
-        score=validation_report.score,
-        sections_manquantes=", ".join(validation_report.sections_manquantes) or "Aucune",
-        clauses_eliminatoires=", ".join(validation_report.clauses_eliminatoires) or "Aucune",
-        points_faibles="\n- ".join(validation_report.points_faibles) or "Aucun",
-        recommandations="\n- ".join(validation_report.recommandations) or "Aucune",
-        requirements=json.dumps(requirements, ensure_ascii=False, indent=2),
+        dossier=json.dumps(dossier),
+        score=report.score,
+        sections_manquantes=", ".join(report.sections_manquantes),
+        clauses_eliminatoires=", ".join(report.clauses_eliminatoires),
+        points_faibles=", ".join(report.points_faibles),
+        recommandations=", ".join(report.recommandations),
+        requirements=json.dumps(requirements)
     )
-
-    logger.info("LLM refinement call triggered → model={m}", m=settings.FEATHERLESS_MODEL)
-
     raw = await client.call_llm(
-        system_prompt=system,
+        system_prompt=prompts.REFINEMENT_SYSTEM,
         user_message=user,
         model=settings.FEATHERLESS_MODEL,
-        temperature=0.3,
-        response_format="json",
+        response_format="json"
     )
-
-    try:
-        return _safe_parse_json(raw)
-    except Exception as exc:
-        logger.error("LLM refinement returned non-JSON: {err}", err=str(exc))
-        raise ValueError(f"LLM refinement returned invalid JSON: {exc}") from exc
+    return _safe_parse_json(raw)
 
 
-# ── JSON parse helper (shared) ───────────────────────────────────────────────
+# ── Phases 2-3 — Batch Evaluation (Auditor Journey) ──────────────────────────
+
+async def evaluate_compliance(pdf_text: str) -> ComplianceChecklist:
+    """Phase 2: Administrative check."""
+    raw = await client.call_llm(
+        system_prompt=prompts.COMPLIANCE_EXTRACTION_SYSTEM,
+        user_message=prompts.COMPLIANCE_EXTRACTION_USER.format(
+            document_text=pdf_text,
+            tender_ref="UNKNOWN", 
+            enterprise_name="UNKNOWN"
+        ),
+        model=settings.FEATHERLESS_MODEL,
+        response_format="json"
+    )
+    data = _safe_parse_json(raw)
+    return ComplianceChecklist(**data)
+
+async def score_technical_section(pdf_text: str, rubric: str) -> TechnicalScore:
+    """Phase 3: Technical scoring."""
+    raw = await client.call_llm(
+        system_prompt=prompts.TECHNICAL_SCORING_SYSTEM,
+        user_message=prompts.TECHNICAL_SCORING_USER.format(
+            document_text=pdf_text,
+            rubric_json=rubric,
+            tender_ref="UNKNOWN",
+            enterprise_name="UNKNOWN"
+        ),
+        model=settings.GEMINI_MODEL,
+        response_format="json"
+    )
+    data = _safe_parse_json(raw)
+    # The teammate's schema has 'criteria_scores', but the prompt might return 'scores'.
+    # Manual mapping if necessary
+    if "scores" in data and "criteria_scores" not in data:
+        data["criteria_scores"] = data.pop("scores")
+    return TechnicalScore(**data)
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _safe_parse_json(content: str) -> dict:
-    """
-    Try multiple strategies to extract valid JSON from an LLM response.
-    """
-    # 1. Direct parse
+    """Extract and parse JSON from LLM response."""
     try:
         return json.loads(content)
-    except json.JSONDecodeError:
-        pass
-
-    # 2. Extract from ```json block
-    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
-            pass
-
-    # 3. Find first top-level {...}
-    match = re.search(r"\{[\s\S]*\}", content)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass
-
-    raise json.JSONDecodeError(
-        f"Could not extract JSON from LLM response (first 100 chars): {content[:100]}",
-        content,
-        0,
-    )
+    except:
+        match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+        if match: return json.loads(match.group(1))
+        match = re.search(r"\{[\s\S]*\}", content)
+        if match: return json.loads(match.group(0))
+    raise ValueError(f"Could not parse JSON: {content[:100]}")
