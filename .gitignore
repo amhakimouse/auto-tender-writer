@@ -1,2 +1,19 @@
-*.env
+# Environment
 .env
+*.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Local Data
+data/
+*.db
+*.log
+
+# Temporary / Debug
+models.txt
+tender.txt
+tender.pdf
+testing_output/
+.DS_Store

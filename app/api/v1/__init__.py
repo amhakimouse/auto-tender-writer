@@ -24,6 +24,7 @@ from app.api.v1.endpoints.tender_writer import router as tender_writer_router
 router = APIRouter()
 
 router.include_router(intake_router,     prefix="/intake",     tags=["Phase 1 & 8 — Intake & Appeals"])
+router.include_router(intake_router,     prefix="",            tags=["Tender AI — Pipeline"])
 router.include_router(compliance_router, prefix="/compliance", tags=["Phase 2 — Compliance"])
 router.include_router(evaluation_router, prefix="/evaluation", tags=["Phase 3-5 — Evaluation"])
 router.include_router(committee_router,  prefix="/committee",  tags=["Phase 6 & 7 — Committee"])

@@ -17,9 +17,13 @@ async def validate_dossier(
     """
     logger.info("Validating dossier compliance using Mistral...")
     
+    # Handle both dicts and Pydantic objects
+    req_json = requirements.model_dump_json(indent=2) if hasattr(requirements, 'model_dump_json') else json.dumps(requirements, indent=2)
+    dos_json = dossier.model_dump_json(indent=2) if hasattr(dossier, 'model_dump_json') else json.dumps(dossier, indent=2)
+    
     user_message = TENDER_VALIDATION_USER.format(
-        requirements_json=requirements.model_dump_json(indent=2),
-        dossier_json=dossier.model_dump_json(indent=2)
+        requirements_json=req_json,
+        dossier_json=dos_json
     )
     
     # Call Mistral-7B via Featherless

@@ -9,7 +9,7 @@ read os.environ directly in the application code.
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional, Dict
 
 from pydantic import AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
 
     # ── Gemini (Generation Phase) ──────────────────────────────────────────
     GEMINI_API_KEY: Optional[str] = Field(default=None)
-    GEMINI_MODEL: str = Field(default="gemini-1.5-flash")
+    GEMINI_MODEL: str = Field(default="gemini-flash-latest")
 
     # ── Featherless / Mistral (Validation Phase) ───────────────────────────
     FEATHERLESS_API_KEY: Optional[str] = Field(default=None)
