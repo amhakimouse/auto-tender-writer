@@ -155,6 +155,12 @@ class Offer(Base, TimestampMixin):
         back_populates="offer",
         lazy="selectin",
     )
+    evaluations: Mapped[list["Evaluation"]] = relationship(
+        "Evaluation",
+        back_populates="offer",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return (

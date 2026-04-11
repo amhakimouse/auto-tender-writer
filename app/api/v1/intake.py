@@ -31,8 +31,9 @@ from app.schemas.offer import (
     OfferUploadResponse,
 )
 from app.schemas.api_schemas import AnalyzeResponse, DossierResult
-from app.services import pdf_service, evaluation_service
+from app.services import evaluation_service
 from app.llm import orchestrator
+from app.utils.file_parser import extract_text_from_pdf_bytes
 from app.utils.audit_logger import ActionType, log_event
 
 if TYPE_CHECKING:
@@ -81,19 +82,23 @@ async def analyze_tender(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Step 6: Complete Pipeline Integration.
+    Step 6: Complete Pipeline Integration with Persistence.
     Receives a Tender PDF and a Company Profile, extracts requirements, 
     generates a compliant dossier, and validates/refines it via Person 2 logic.
+    Persistence: Saves the extracted data, generated dossier, and evaluation to the DB.
     """
     try:
         # 1. Read and Extract PDF Text
         logger.info("Received analyze request for file: {}", file.filename)
         pdf_content = await file.read()
-        document_text = pdf_service.extract_text(pdf_content)
+        document_text = extract_text_from_pdf_bytes(pdf_content)
         
         if not document_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from the provided PDF.")
         
+        # Compute hash for integrity/de-duplication
+        file_hash = compute_sha256(pdf_content)
+
         # 2. Extract Requirements (Person 1A Logic)
         requirements = await orchestrator.extract_requirements(document_text)
         
@@ -112,9 +117,59 @@ async def analyze_tender(
             dossier=dossier_draft
         )
         
-        # 6. Build and return response
+        # 6. PERSISTENCE (Phase 7)
+        # ----------------------------------------------------------------------
+        # Create Tender record
+        tender = Tender(
+            title=requirements.get("tender_title", "Untitled Tender"),
+            reference_number=requirements.get("tender_reference", f"REF-{file_hash[:8]}"),
+            deadline=datetime.utcnow() + timedelta(days=30), # Dummy deadline from requirements extraction if needed
+            status=TenderStatus.PUBLISHED,
+            description=f"Automated extraction from {file.filename}",
+            technical_requirements=requirements.get("technical_requirements", []),
+            administrative_documents=requirements.get("administrative_documents", []),
+            selection_criteria=requirements.get("selection_criteria", [])
+        )
+        db.add(tender)
+        await db.flush() # Get tender.id
+
+        # Create Offer record
+        offer = Offer(
+            tender_id=tender.id,
+            bidder_name=profile_dict.get("company_name", "Prospective Bidder"),
+            bidder_email=profile_dict.get("contact_email", ""),
+            file_hash_sha256=file_hash,
+            submitted_at=datetime.utcnow(),
+            original_filename=file.filename,
+            status=OfferStatus.TECHNICAL_SCORED,
+            # Store the generated dossier in committee_notes for now or technical_score
+            committee_notes=json.dumps(final_dossier)
+        )
+        db.add(offer)
+        await db.flush() # Get offer.id
+
+        # Save file to vault
+        vault_path = save_upload_to_vault(pdf_content, tender.id, offer.id, file.filename)
+        offer.storage_path = str(vault_path)
+
+        # Create Evaluation record (Person 2 Results)
+        from app.db.models.evaluation import Evaluation, EvaluationStatus
+        eval_record = Evaluation(
+            offer_id=offer.id,
+            status=EvaluationStatus.COMPLETED,
+            compliance_score=validation_report.compliance_score,
+            verdict=validation_report.verdict,
+            report_data=validation_report.model_dump(),
+            completed_at=datetime.utcnow()
+        )
+        db.add(eval_record)
+        
+        await db.commit()
+        # ----------------------------------------------------------------------
+
+        # 7. Build and return response
         return AnalyzeResponse(
-            tender_ref=requirements.get("tender_reference", requirements.get("tender_ref", "UNKNOWN")),
+            tender_ref=tender.reference_number,
             status="success",
             requirements=requirements,
             dossier=DossierResult(**final_dossier),
@@ -122,7 +177,8 @@ async def analyze_tender(
         )
 
     except Exception as e:
-        logger.exception("Analysis failed")
+        await db.rollback()
+        logger.exception("Analysis and persistence failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post(
