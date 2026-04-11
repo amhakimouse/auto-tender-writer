@@ -699,3 +699,86 @@ async def submit_appeal(
         acknowledgement_text=acknowledgement,
         case_reference=case_ref,
     )
+
+# =============================================================================
+# Prototype Demo endpoint for Frontend Standalone UI Test
+# =============================================================================
+import asyncio
+from pydantic import BaseModel
+
+class DemoAnalyzeResponse(BaseModel):
+    validation: dict
+    requirements: dict
+    dossier: dict
+
+@router.post("/analyze", response_model=DemoAnalyzeResponse)
+async def analyze_tender_document(
+    tender_id: int = Form(...),
+    file: UploadFile = File(...),
+    profile_context: str = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Real AI analysis pipeline for the Bid Writer application.
+    1. Extract requirements from the uploaded tender PDF.
+    2. Generate a tailored response dossier using the company profile.
+    3. Validate the dossier and return a compliance score + recommendations.
+    """
+    from app.llm import orchestrator
+    from app.utils.file_parser import extract_text_from_pdf
+    import tempfile
+    import os
+
+    # Fetch real tender from database
+    result = await db.execute(select(Tender).where(Tender.id == tender_id))
+    tender = result.scalar_one_or_none()
+    
+    if not tender:
+        raise HTTPException(status_code=404, detail="Tender not found")
+
+    # Read file and extract text
+    try:
+        content = await file.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        
+        pdf_text = extract_text_from_pdf(Path(tmp_path))
+        os.unlink(tmp_path)
+    except Exception as e:
+        logger.error(f"Failed to extract text from PDF: {e}")
+        raise HTTPException(status_code=400, detail="Could not read PDF content.")
+
+    # Person 1A: Extract Requirements
+    try:
+        requirements = await orchestrator.extract_requirements(pdf_text)
+    except Exception as e:
+        logger.warning(f"Requirement extraction failed: {e}. Using fallback.")
+        requirements = {"administrative_documents": ["Check PDF for requirements"], "selection_criteria": []}
+
+    # Person 1B: Generate Dossier
+    profile = {"capability_statement": profile_context}
+    try:
+        dossier = await orchestrator.generate_dossier(requirements, profile)
+    except Exception as e:
+        logger.error(f"Dossier generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate tender dossier.")
+
+    # Person 2: Validate & Score
+    try:
+        validation_report = await orchestrator.validate_dossier(requirements, dossier)
+        validation = {
+            "compliance_score": validation_report.score,
+            "verdict": "STRONG MATCH" if validation_report.score > 80 else "POTENTIAL MATCH",
+            "sections_compliant": [s for s in validation_report.sections_manquantes if "found" in s] or ["Evaluated"],
+            "recommendations": validation_report.recommandations
+        }
+    except Exception as e:
+        logger.warning(f"Validation failed: {e}")
+        validation = {"compliance_score": 0, "verdict": "ERROR", "sections_compliant": [], "recommendations": ["Validation failed"]}
+
+    return {
+        "validation": validation,
+        "requirements": requirements,
+        "dossier": dossier
+    }

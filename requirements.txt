@@ -40,3 +40,4 @@ httpx>=0.23.0                      # Async HTTP client — version controlled by
 
 # --- Observability ---
 loguru==0.7.3                      # Structured logging
+email-validator==2.1.1

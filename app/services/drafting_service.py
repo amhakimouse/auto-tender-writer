@@ -268,6 +268,26 @@ Generate the proposal draft as structured JSON matching the DraftedProposal sche
     data = json.loads(raw_response)
     draft = DraftedProposal(**data)
 
+    # -------------------------------------------------------------------------
+    # ENFORCER LOGIC: The LLM shouldn't randomly guess the resemblance percentage.
+    # Python computes the EXACT string matching ratio to find new vs reused content.
+    # -------------------------------------------------------------------------
+    import difflib
+
+    total_drafted_text = " ".join([s.drafted_content for s in draft.sections])
+    total_source_text = " ".join([b.content_snippet for b in past_bids])
+
+    if total_drafted_text and total_source_text:
+        # SequenceMatcher ratio returns a similarity score from 0.0 to 1.0
+        matcher = difflib.SequenceMatcher(None, total_drafted_text.lower(), total_source_text.lower())
+        resemblance_ratio = matcher.ratio()
+
+        # New content percentage is the exact inverse of resemblance
+        exact_new_content_pct = round((1.0 - resemblance_ratio) * 100.0, 2)
+        draft.new_content_percentage = exact_new_content_pct
+    else:
+        draft.new_content_percentage = 100.0 if not total_source_text else 0.0
+
     return draft
 
 

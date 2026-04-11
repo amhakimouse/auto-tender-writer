@@ -1,8 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Upload, CheckCircle2, AlertCircle, FileText, Info, ArrowRight, Download, Eye } from 'lucide-react'
 
 // --- Components ---
+
+function AccordionItem({ title, children }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ width: '100%', padding: '16px', background: 'rgba(0,0,0,0.02)', border: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontSize: '16px', fontWeight: 600, textAlign: 'left', color: 'inherit' }}
+      >
+        {title}
+        <span>{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen && (
+        <div style={{ padding: '16px 24px', background: 'white', borderTop: '1px solid var(--border-color)', lineHeight: '1.6' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function Header() {
   return (
@@ -159,11 +179,22 @@ function ResultsView({ data }) {
   const score = data.validation.compliance_score || 0
   const getColor = (s) => s > 70 ? 'var(--success)' : s > 40 ? 'var(--warning)' : 'var(--error)'
 
+  const [isEditing, setIsEditing] = useState(false)
+  const [dossier, setDossier] = useState(data.dossier)
+
+  const handleEditChange = (key, value) => {
+    setDossier({ ...dossier, [key]: value })
+  }
+
+  const handleExportPDF = () => {
+    window.print()
+  }
+
   return (
     <main style={{ maxWidth: '1200px', margin: '40px auto', padding: '0 24px' }} className="animate-fade-in">
       {/* Upper Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '32px', marginBottom: '32px' }}>
-        <div className="glass-card" style={{ padding: '32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="glass-card summary-card" style={{ padding: '32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ position: 'relative', width: '160px', height: '160px', marginBottom: '24px' }}>
             <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
               <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#E2E8F0" strokeWidth="3" />
@@ -205,8 +236,8 @@ function ResultsView({ data }) {
       </div>
 
       {/* Dual View Editor */}
-      <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '350px 1fr', height: '600px', overflow: 'hidden' }}>
-        <div style={{ borderRight: '1px solid var(--border-color)', padding: '24px', overflowY: 'auto', backgroundColor: 'rgba(0,0,0,0.02)' }}>
+      <div className="glass-card editor-card" style={{ display: 'grid', gridTemplateColumns: '350px 1fr', height: '600px', overflow: 'hidden' }}>
+        <div className="sidebar" style={{ borderRight: '1px solid var(--border-color)', padding: '24px', overflowY: 'auto', backgroundColor: 'rgba(0,0,0,0.02)' }}>
           <h4 style={{ marginTop: 0, marginBottom: '20px', fontSize: '16px' }}>Requirements Extracted</h4>
           {data.requirements.administrative_documents?.map((doc, i) => (
             <div key={i} style={{ padding: '12px', background: 'white', borderRadius: '10px', marginBottom: '12px', fontSize: '13px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
@@ -220,10 +251,15 @@ function ResultsView({ data }) {
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="toolbar" style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '16px' }}>
-              <button disabled style={{ background: 'white', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600 }}>Edit Draft</button>
-              <button style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button 
+                onClick={() => setIsEditing(!isEditing)} 
+                style={{ background: isEditing ? 'var(--primary)' : 'white', color: isEditing ? 'white' : 'inherit', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {isEditing ? 'Save Draft' : 'Edit Draft'}
+              </button>
+              <button onClick={handleExportPDF} style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                 <Download size={16} /> Export PDF
               </button>
             </div>
@@ -231,29 +267,38 @@ function ResultsView({ data }) {
           </div>
           <div style={{ padding: '40px', overflowY: 'auto', lineHeight: '1.6' }}>
             <h1 style={{ textAlign: 'center', marginBottom: '48px' }}>OFFRE TECHNIQUE</h1>
-            <section style={{ marginBottom: '32px' }}>
-              <h3>Note de Présentation</h3>
-              <p>{data.dossier.presentation_note}</p>
-            </section>
-            <section style={{ marginBottom: '32px' }}>
-              <h3>Références Similaires</h3>
-              <p>{data.dossier.similar_references_note}</p>
-            </section>
-            <section style={{ marginBottom: '32px' }}>
-              <h3>Méthodologie d'Exécution</h3>
-              <p>{data.dossier.execution_methodology}</p>
-            </section>
-            <section style={{ marginBottom: '32px' }}>
-              <h3>Planning Prévisionnel</h3>
-              <p>{data.dossier.preliminary_schedule}</p>
-            </section>
-            <section style={{ marginBottom: '32px' }}>
-              <h3>Détails Techniques</h3>
-              <p>{data.dossier.technical_offer_details}</p>
-            </section>
+            
+            <AccordionItem title="Note de Présentation">
+              {isEditing ? <textarea style={{width: '100%', minHeight: '120px', padding: '8px', fontFamily: 'inherit'}} value={dossier.presentation_note} onChange={e => handleEditChange('presentation_note', e.target.value)} /> : <p style={{ margin: 0 }}>{dossier.presentation_note}</p>}
+            </AccordionItem>
+            
+            <AccordionItem title="Références Similaires">
+              {isEditing ? <textarea style={{width: '100%', minHeight: '120px', padding: '8px', fontFamily: 'inherit'}} value={dossier.similar_references_note} onChange={e => handleEditChange('similar_references_note', e.target.value)} /> : <p style={{ margin: 0 }}>{dossier.similar_references_note}</p>}
+            </AccordionItem>
+            
+            <AccordionItem title="Méthodologie d'Exécution">
+              {isEditing ? <textarea style={{width: '100%', minHeight: '120px', padding: '8px', fontFamily: 'inherit'}} value={dossier.execution_methodology} onChange={e => handleEditChange('execution_methodology', e.target.value)} /> : <p style={{ margin: 0 }}>{dossier.execution_methodology}</p>}
+            </AccordionItem>
+            
+            <AccordionItem title="Planning Prévisionnel">
+              {isEditing ? <textarea style={{width: '100%', minHeight: '120px', padding: '8px', fontFamily: 'inherit'}} value={dossier.preliminary_schedule} onChange={e => handleEditChange('preliminary_schedule', e.target.value)} /> : <p style={{ margin: 0 }}>{dossier.preliminary_schedule}</p>}
+            </AccordionItem>
+            
+            <AccordionItem title="Détails Techniques">
+              {isEditing ? <textarea style={{width: '100%', minHeight: '120px', padding: '8px', fontFamily: 'inherit'}} value={dossier.technical_offer_details} onChange={e => handleEditChange('technical_offer_details', e.target.value)} /> : <p style={{ margin: 0 }}>{dossier.technical_offer_details}</p>}
+            </AccordionItem>
           </div>
         </div>
       </div>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .editor-card, .editor-card * { visibility: visible; }
+          .editor-card { position: absolute; left: 0; top: 0; width: 100%; height: auto; border: none; box-shadow: none; display: block !important; }
+          .sidebar, .toolbar, .summary-card, header { display: none !important; }
+          button { display: none !important; }
+        }
+      `}</style>
     </main>
   )
 }

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import Base
 from app.db.models import (  # noqa: F401 - imports register models with Base.metadata
     AuditLog,
-    Evaluation,
+    Appeal,
     Offer,
     Tender,
     User,

@@ -82,8 +82,8 @@ async def submit_appeal_endpoint(
     ],
     appellant_email: Annotated[
         str | None,
-        Form(None, description="Contact email for appeal correspondence"),
-    ],
+        Form(description="Contact email for appeal correspondence"),
+    ] = None,
     appeal_file: UploadFile = File(
         ...,
         description="Appeal PDF document (signed, formal appeal letter)",

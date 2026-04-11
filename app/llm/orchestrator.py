@@ -28,8 +28,8 @@ from typing import Any
 from loguru import logger
 from pydantic import ValidationError
 
-from app.llm import client
-from app.llm.prompts import enterprise as enterprise_prompts
+from app.llm import client, prompts
+from app.schemas.llm_output import ValidationReportLLM
 from app.schemas.llm_schemas import (
     ComplianceChecklist,
     FinancialData,
@@ -37,6 +37,66 @@ from app.schemas.llm_schemas import (
     create_empty_compliance_result,
     create_empty_technical_score,
 )
+
+
+# ── Person 1 — Generation Logic ──────────────────────────────────────────────
+
+async def extract_requirements(document_text: str) -> dict:
+    """Person 1A: Extract requirements from tender text."""
+    raw = await client.call_llm(
+        system_prompt=prompts.REQUIREMENTS_EXTRACTION_SYSTEM,
+        user_message=prompts.REQUIREMENTS_EXTRACTION_USER.format(document_text=document_text),
+        response_format={"type": "json_object"}
+    )
+    return json.loads(raw)
+
+async def generate_dossier(requirements: dict, profile: dict) -> dict:
+    """Person 1B: Generate a tender response dossier."""
+    user_message = prompts.TENDER_GENERATION_USER.format(
+        requirements_json=json.dumps(requirements),
+        profile_json=json.dumps(profile)
+    )
+    raw = await client.call_llm(
+        system_prompt=prompts.TENDER_GENERATION_SYSTEM,
+        user_message=user_message,
+        response_format={"type": "json_object"}
+    )
+    return json.loads(raw)
+
+
+# ── Person 2 — Validation & Refinement ───────────────────────────────────────
+
+async def validate_dossier(requirements: dict, dossier: dict) -> ValidationReportLLM:
+    """Person 2: Validate live dossier."""
+    system = prompts.VALIDATION_SYSTEM
+    user = prompts.VALIDATION_USER.format(
+        requirements=json.dumps(requirements),
+        dossier=json.dumps(dossier)
+    )
+    raw = await client.call_llm(
+        system_prompt=system,
+        user_message=user,
+        response_format={"type": "json_object"}
+    )
+    return _parse_and_validate(raw, ValidationReportLLM, "Person 2 Validation")
+
+async def refine_dossier_specialized(dossier: dict, report: ValidationReportLLM, requirements: dict) -> dict:
+    """Person 2: Refine dossier based on auditor feedback."""
+    user = prompts.REFINEMENT_USER.format(
+        dossier=json.dumps(dossier),
+        score=report.score,
+        sections_manquantes=", ".join(report.sections_manquantes),
+        clauses_eliminatoires=", ".join(report.clauses_eliminatoires),
+        points_faibles=", ".join(report.points_faibles),
+        recommandations=", ".join(report.recommandations),
+        requirements=json.dumps(requirements)
+    )
+    raw = await client.call_llm(
+        system_prompt=prompts.REFINEMENT_SYSTEM,
+        user_message=user,
+        response_format={"type": "json_object"}
+    )
+    return json.loads(raw)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
