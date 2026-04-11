@@ -271,7 +271,13 @@ export default function App() {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('profile_context', profile)
+    // Wrap the raw text in a JSON object as expected by the backend intake.py
+    const profileJson = JSON.stringify({
+      company_name: "My Enterprise",
+      description: profile,
+      contact_email: "contact@enterprise.com"
+    })
+    formData.append('company_profile', profileJson)
 
     try {
       const response = await axios.post('/api/v1/intake/analyze', formData)
