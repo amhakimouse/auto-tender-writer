@@ -1,0 +1,11 @@
+# data/ — Secure File Vault
+#
+# This directory stores uploaded offer PDFs and any other binary assets.
+# It is created automatically at application startup by main.py.
+#
+# SECURITY RULES (enforced by Python, never the LLM):
+#   - Files are stored with UUID-based names (original filename is NOT used).
+#   - SHA-256 hash is computed on upload and stored in the DB for tamper detection.
+#   - Files are never served directly — always via a signed, time-limited URL.
+#   - This directory must be excluded from version control (.gitignore).
+#   - In production, replace with an object store (S3, GCS, Azure Blob).
