@@ -9,7 +9,7 @@ read os.environ directly in the application code.
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional, Dict
 
 from pydantic import AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,60 +66,25 @@ class Settings(BaseSettings):
         description="Redis backend for Celery result storage.",
     )
 
-    # ── LLM Provider ──────────────────────────────────────────────────────
+    # ── LLM Provider (Default / Global) ────────────────────────────────────
     LLM_BASE_URL: AnyHttpUrl = Field(
-        default="http://localhost:11434/v1",   # Default: local Ollama OpenAI-compat endpoint
-        description=(
-            "Base URL for the OpenAI-compatible LLM API. "
-            "Swap to https://api.openai.com/v1 for OpenAI."
-        ),
+        default="http://localhost:11434/v1",
+        description="Base URL for the primary LLM API."
     )
-    LLM_API_KEY: str = Field(
-        default="ollama",
-        description="API key for the LLM provider.  'ollama' for local Ollama.",
-    )
-    LLM_MODEL: str = Field(
-        default="kimi-k2",
-        description="Model identifier passed to litellm / openai client.",
-    )
-    LLM_TEMPERATURE: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=2.0,
-        description=(
-            "LLM temperature — keep at 0.0 for deterministic JSON extraction. "
-            "Only raise for narrative generation tasks."
-        ),
-    )
-    LLM_MAX_TOKENS: int = Field(
-        default=4096,
-        description="Hard cap on tokens the LLM may return per call.",
-    )
-    LLM_REQUEST_TIMEOUT: int = Field(
-        default=120,
-        description="Seconds before an LLM HTTP request times out.",
-    )
+    LLM_API_KEY: str = Field(default="ollama")
+    LLM_MODEL: str = Field(default="kimi-k2")
+    LLM_TEMPERATURE: float = Field(default=0.0)
+    LLM_MAX_TOKENS: int = Field(default=4096)
+    LLM_REQUEST_TIMEOUT: int = Field(default=120)
 
-    # ── LLM Provider Selection ─────────────────────────────────────────────
-    LLM_PROVIDER: Literal["ollama", "openai", "gemini"] = Field(
-        default="ollama",
-        description=(
-            "Which LLM backend to use. "
-            "'ollama' → local Ollama via litellm. "
-            "'openai' → OpenAI-compatible API via litellm. "
-            "'gemini' → Google Gemini via google-genai SDK (uses GEMINI_API_KEY)."
-        ),
-    )
+    # ── Gemini (Generation Phase) ──────────────────────────────────────────
+    GEMINI_API_KEY: Optional[str] = Field(default=None)
+    GEMINI_MODEL: str = Field(default="gemini-flash-latest")
 
-    # ── Gemini-specific settings ───────────────────────────────────────────
-    GEMINI_API_KEY: str = Field(
-        default="",
-        description="Google Gemini API key. Required when LLM_PROVIDER='gemini'.",
-    )
-    GEMINI_MODEL: str = Field(
-        default="gemini-2.0-flash",
-        description="Gemini model name. e.g. gemini-2.0-flash, gemini-1.5-pro.",
-    )
+    # ── Featherless / Qwen (Validation Phase) ───────────────────────────
+    FEATHERLESS_API_KEY: Optional[str] = Field(default=None)
+    FEATHERLESS_BASE_URL: AnyHttpUrl = Field(default="https://api.featherless.ai/v1")
+    FEATHERLESS_MODEL: str = Field(default="Qwen/Qwen2.5-32B-Instruct")
 
     # ── File Storage ──────────────────────────────────────────────────────
     DATA_DIR: Path = Field(

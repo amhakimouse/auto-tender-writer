@@ -1,6 +1,7 @@
 """
 app/api/v1/intake.py
 
+<<<<<<< HEAD
 Phase 1 — Offer Submission Intake
 Phase 8 — Enterprise Appeals
 
@@ -42,6 +43,11 @@ from app.utils.audit_logger import ActionType, log_event
 
 if TYPE_CHECKING:
     pass
+=======
+from app.services import pdf_service, evaluation_service
+from app.llm import orchestrator
+from app.schemas.api_schemas import AnalyzeResponse, DossierResult
+>>>>>>> 752ca9c (feat: implement automated tender dossier validation and refinement pipeline using multi-phase LLM orchestration)
 
 router = APIRouter()
 
@@ -53,6 +59,7 @@ ALLOWED_CONTENT_TYPES = {"application/pdf"}
 
 def compute_sha256(file_content: bytes) -> str:
     """
+<<<<<<< HEAD
     Compute the SHA-256 hex digest of file content.
 
     This is the cryptographic proof that the file has not been modified
@@ -190,6 +197,48 @@ async def upload_offer(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tender with ID {tender_id} not found",
+=======
+    Step 6: Complete Pipeline Integration.
+    Receives a Tender PDF and a Company Profile, extracts requirements, 
+    generates a compliant dossier, and validates/refines it via Person 2 logic.
+    """
+    try:
+        # 1. Read and Extract PDF Text
+        logger.info("Received analyze request for file: {}", file.filename)
+        pdf_content = await file.read()
+        document_text = pdf_service.extract_text(pdf_content)
+        
+        if not document_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from the provided PDF.")
+        
+        # 2. Extract Requirements (Person 1A Logic)
+        requirements = await orchestrator.extract_requirements(document_text)
+        
+        # 3. Parse Company Profile
+        try:
+            profile_dict = json.loads(company_profile)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON format for company_profile.")
+        
+        # 4. Generate Initial Dossier Draft (Person 1B Logic)
+        dossier_draft = await orchestrator.generate_dossier(requirements, profile_dict)
+        
+        # 5. Validate & Refine (Person 2 Logic)
+        # This handles the refinement loop automatically if score < threshold
+        # Returns (validation_report, final_refined_dossier)
+        validation_report, final_dossier = await evaluation_service.validate_and_refine(
+            requirements=requirements,
+            dossier=dossier_draft
+        )
+        
+        # 6. Build and return response
+        return AnalyzeResponse(
+            tender_ref=requirements.get("tender_reference", requirements.get("tender_ref", "UNKNOWN")),
+            status="success",
+            requirements=requirements,
+            dossier=DossierResult(**final_dossier),
+            validation=validation_report
+>>>>>>> 752ca9c (feat: implement automated tender dossier validation and refinement pipeline using multi-phase LLM orchestration)
         )
 
     # ==========================================================================

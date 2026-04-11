@@ -57,6 +57,7 @@ if TYPE_CHECKING:
 # Phase 2: Administrative Compliance Check
 # =============================================================================
 
+<<<<<<< HEAD
 
 class ComplianceEvaluationResult:
     """Result container for compliance evaluation."""
@@ -89,6 +90,18 @@ async def evaluate_offer_compliance(
         4. If ANY mandatory document is missing → DISQUALIFIED
         5. Log the decision to audit trail
         6. Return result (success or failure details)
+=======
+async def validate_and_refine(
+    requirements: dict,
+    dossier: dict,
+) -> tuple[ValidationReportResponse, dict]:
+    """
+    Full Person 2 pipeline:
+      1. Validate dossier against requirements (LLM call #1)
+      2. If score < 60 → refine dossier (LLM call #2)
+      3. Re-validate refined dossier (LLM call #3)
+      4. Return the best ValidationReportResponse and the final dossier.
+>>>>>>> 752ca9c (feat: implement automated tender dossier validation and refinement pipeline using multi-phase LLM orchestration)
 
     Args:
         db: Database session
@@ -96,7 +109,11 @@ async def evaluate_offer_compliance(
         tender: The tender this offer responds to
 
     Returns:
+<<<<<<< HEAD
         ComplianceEvaluationResult with pass/fail status
+=======
+        tuple containing (ValidationReportResponse, final_dossier_dict).
+>>>>>>> 752ca9c (feat: implement automated tender dossier validation and refinement pipeline using multi-phase LLM orchestration)
     """
     logger.info(
         "Starting compliance evaluation for offer {offer_id} (tender {tender_id})",
@@ -517,10 +534,37 @@ async def evaluate_technical_score(
         score=normalized_score,
     )
 
+<<<<<<< HEAD
     return TechnicalEvaluationResult(
         success=True,
         score=technical_result,
         normalized_score=normalized_score,
+=======
+    # ── Step 3: Return result pair ────────────────────────────────────────
+    return _to_api_response(report, refinement_attempts), current_dossier
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _to_api_response(
+    report: ValidationReportLLM,
+    refinement_attempts: int,
+) -> ValidationReportResponse:
+    """
+    Map the internal LLM Pydantic model to the public API response schema.
+    Keeps the two schemas decoupled so we can evolve them independently.
+    """
+    return ValidationReportResponse(
+        score=report.score,
+        verdict=report.verdict,
+        sections_conformes=report.sections_conformes,
+        sections_manquantes=report.sections_manquantes,
+        clauses_eliminatoires=report.clauses_eliminatoires,
+        points_faibles=report.points_faibles,
+        recommandations=report.recommandations,
+        refined=refinement_attempts > 0,
+        refinement_attempts=refinement_attempts,
+>>>>>>> 752ca9c (feat: implement automated tender dossier validation and refinement pipeline using multi-phase LLM orchestration)
     )
 
 
