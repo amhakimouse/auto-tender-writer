@@ -28,3 +28,4 @@ htmlcov/
 
 # Data & Secure vaults
 data/
+frontend/node_modules   
