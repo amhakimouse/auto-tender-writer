@@ -19,6 +19,7 @@ from app.api.v1.intake import router as intake_router
 from app.api.v1.compliance import router as compliance_router
 from app.api.v1.evaluation import router as evaluation_router
 from app.api.v1.committee import router as committee_router
+from app.api.v1.endpoints.tender_writer import router as tender_writer_router
 
 router = APIRouter()
 
@@ -26,3 +27,4 @@ router.include_router(intake_router,     prefix="/intake",     tags=["Phase 1 & 
 router.include_router(compliance_router, prefix="/compliance", tags=["Phase 2 — Compliance"])
 router.include_router(evaluation_router, prefix="/evaluation", tags=["Phase 3-5 — Evaluation"])
 router.include_router(committee_router,  prefix="/committee",  tags=["Phase 6 & 7 — Committee"])
+router.include_router(tender_writer_router, prefix="/tender-writer", tags=["Tender AI — Writer"])
