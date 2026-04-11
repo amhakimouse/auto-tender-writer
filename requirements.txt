@@ -23,9 +23,10 @@ celery==5.4.0
 redis==5.2.1
 
 # --- LLM Integration ---
-litellm==1.55.8               # Unified LLM interface (OpenAI-compatible, Kimi K2.5, etc.)
-openai==1.59.3                # OpenAI SDK (used as the wire protocol)
-instructor==1.7.0             # Enforced structured JSON extraction from LLMs via Pydantic
+litellm>=1.55.8               # Unified LLM interface (OpenAI-compatible, Kimi K2.5, etc.)
+openai>=1.59.3                # OpenAI SDK (used as the wire protocol)
+instructor>=1.7.0             # Enforced structured JSON extraction from LLMs via Pydantic
+google-genai>=1.5.0           # Google Gemini native SDK (used when LLM_PROVIDER=gemini)
 
 # --- PDF Processing ---
 pdfplumber==0.11.4            # Primary PDF text extraction
@@ -35,7 +36,7 @@ pymupdf==1.25.1               # Fallback: PyMuPDF (fitz) for complex PDFs
 python-jose[cryptography]==3.3.0   # JWT token handling
 passlib[bcrypt]==1.7.4             # Password hashing
 python-dotenv==1.0.1               # .env file loading
-httpx==0.28.1                      # Async HTTP client (for LLM call testing)
+httpx>=0.23.0                      # Async HTTP client — version controlled by litellm
 
 # --- Observability ---
 loguru==0.7.3                      # Structured logging

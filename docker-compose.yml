@@ -1,0 +1,175 @@
+# =============================================================================
+# Auto Tender Writer — Docker Compose
+#
+# Services:
+#   api      → FastAPI app (uvicorn with --reload in dev)
+#   db       → PostgreSQL 16 (async-compatible with asyncpg)
+#   redis    → Redis 7 (Celery broker + result backend)
+#   worker   → Celery worker (background LLM tasks)
+#
+# Usage:
+#   docker compose up --build          # start everything
+#   docker compose up --build api      # start only the API (+ its deps)
+#   docker compose down -v             # stop and remove volumes
+#   docker compose logs -f api         # stream API logs
+# =============================================================================
+
+services:
+
+  # ── FastAPI Application ────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime           # Use the lean runtime stage
+    container_name: atw_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"             # FastAPI → localhost:8000
+    volumes:
+      - ./app:/app/app          # Live-reload: mount source into container
+      - atw_data:/app/data      # Persistent secure file vault (PDFs)
+    environment:
+      # ── App ───────────────────────────────────────────────────────────────
+      ENVIRONMENT: development
+      DEBUG: "true"
+      # ── Database (points to the 'db' service below) ────────────────────
+      DATABASE_URL: postgresql+asyncpg://atw_user:atw_pass@db:5432/atw_db
+      # ── Redis / Celery (points to the 'redis' service below) ──────────
+      REDIS_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      # ── LLM Provider ─ switch by changing LLM_PROVIDER only ──────────────
+      # Option A: Google Gemini (active) —————————————————————————
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: "AIzaSyAm4kkEE94G0w9u2nOpFnzqeCTwiSBpXAs"
+      GEMINI_MODEL: gemini-2.0-flash
+      LLM_TEMPERATURE: "0.0"
+      LLM_MAX_TOKENS: "8192"
+      LLM_REQUEST_TIMEOUT: "120"
+      # Option B: Local Ollama on host machine (uncomment + comment A above)
+      # LLM_PROVIDER: ollama
+      # LLM_BASE_URL: http://host.docker.internal:11434/v1
+      # LLM_API_KEY: ollama
+      # LLM_MODEL: kimi-k2
+      # ── Security ────────────────────────────────────────────────────────
+      SECRET_KEY: dev_secret_change_in_production
+      # ── Thresholds ──────────────────────────────────────────────────────
+      LATE_SUBMISSION_TOLERANCE_SECONDS: "0"
+      ABNORMALLY_LOW_PRICE_THRESHOLD_PCT: "15.0"
+      CLOSE_TIE_THRESHOLD_PCT: "3.0"
+      DEFAULT_TECHNICAL_WEIGHT: "0.70"
+      # ── File Vault ──────────────────────────────────────────────────────
+      DATA_DIR: /app/data
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app/app
+        --log-level debug
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - atw_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux support for host resolution
+
+  # ── PostgreSQL 16 ─────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: atw_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: atw_user
+      POSTGRES_PASSWORD: atw_pass
+      POSTGRES_DB: atw_db
+    volumes:
+      - atw_postgres:/var/lib/postgresql/data   # Persist DB between restarts
+    ports:
+      - "5432:5432"             # Expose for GUI tools (DBeaver, pgAdmin, etc.)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atw_user -d atw_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - atw_network
+
+  # ── Redis 7 ───────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: atw_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - atw_redis:/data                         # Persist Celery task results
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - atw_network
+
+  # ── Celery Worker (Background LLM Tasks) ──────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: atw_worker
+    restart: unless-stopped
+    volumes:
+      - ./app:/app/app
+      - atw_data:/app/data
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://atw_user:atw_pass@db:5432/atw_db
+      REDIS_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: "AIzaSyAm4kkEE94G0w9u2nOpFnzqeCTwiSBpXAs"
+      GEMINI_MODEL: gemini-2.0-flash
+      LLM_TEMPERATURE: "0.0"
+      LLM_MAX_TOKENS: "8192"
+      SECRET_KEY: dev_secret_change_in_production
+      DATA_DIR: /app/data
+    # Celery worker entrypoint — will be fully wired in Milestone 1
+    command: >
+      celery -A app.worker worker
+        --loglevel=info
+        --concurrency=2
+        -Q default
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - atw_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - full    # Only start worker with: docker compose --profile full up
+
+# ── Named Volumes ──────────────────────────────────────────────────────────
+volumes:
+  atw_postgres:
+    name: atw_postgres_data
+  atw_redis:
+    name: atw_redis_data
+  atw_data:
+    name: atw_secure_file_vault
+
+# ── Network ────────────────────────────────────────────────────────────────
+networks:
+  atw_network:
+    name: atw_network
+    driver: bridge

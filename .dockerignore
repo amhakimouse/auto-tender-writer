@@ -1,0 +1,55 @@
+# =============================================================================
+# .dockerignore — Files excluded from the Docker build context
+# Keeping the context small = faster builds and no accidental secret leaks
+# =============================================================================
+
+# ── Version control ───────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Local Node.js binary (large, not needed in Python image) ─────────────────
+nodejs/
+node_modules/
+
+# ── Python bytecode & virtualenvs ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.venv/
+venv/
+env/
+
+# ── Environment files (secrets must NEVER go into the image) ────────────────
+.env
+.env.*
+!.env.example      # Allow the example template (no real secrets)
+
+# ── Test artefacts ────────────────────────────────────────────────────────────
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ── IDE / Editor config ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Data vault (mount as a volume instead) ───────────────────────────────────
+data/
+
+# ── Docs / non-runtime files ─────────────────────────────────────────────────
+docs/
+*.md
+!README.md
+
+# ── SQLite dev database (use the Postgres service in Docker) ──────────────────
+*.db
+*.sqlite3
+
+# ── macOS junk ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

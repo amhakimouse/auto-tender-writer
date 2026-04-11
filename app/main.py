@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from app.core.config import settings
+from app.db.init_db import close_db, init_db
 
 # ── Router imports (will be populated in Milestone 1+) ────────────────────────
 # We import them now so the module graph is wired; the routers themselves
@@ -57,9 +58,15 @@ async def lifespan(app: FastAPI):
     # Ensure the secure file vault directory exists at startup.
     settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Initialize database tables (development mode)
+    # In production, use Alembic migrations instead
+    await init_db()
+    logger.info("🗃️   Database tables initialized")
+
     yield  # ← Application runs here
 
     # ── SHUTDOWN ─────────────────────────────────────────────────────────
+    await close_db()
     logger.info("🔻  Shutting down {name}", name=settings.APP_NAME)
 
 

@@ -100,6 +100,27 @@ class Settings(BaseSettings):
         description="Seconds before an LLM HTTP request times out.",
     )
 
+    # ── LLM Provider Selection ─────────────────────────────────────────────
+    LLM_PROVIDER: Literal["ollama", "openai", "gemini"] = Field(
+        default="ollama",
+        description=(
+            "Which LLM backend to use. "
+            "'ollama' → local Ollama via litellm. "
+            "'openai' → OpenAI-compatible API via litellm. "
+            "'gemini' → Google Gemini via google-genai SDK (uses GEMINI_API_KEY)."
+        ),
+    )
+
+    # ── Gemini-specific settings ───────────────────────────────────────────
+    GEMINI_API_KEY: str = Field(
+        default="",
+        description="Google Gemini API key. Required when LLM_PROVIDER='gemini'.",
+    )
+    GEMINI_MODEL: str = Field(
+        default="gemini-2.0-flash",
+        description="Gemini model name. e.g. gemini-2.0-flash, gemini-1.5-pro.",
+    )
+
     # ── File Storage ──────────────────────────────────────────────────────
     DATA_DIR: Path = Field(
         default=Path("data"),
