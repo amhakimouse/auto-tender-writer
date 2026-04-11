@@ -80,6 +80,12 @@ class Tender(Base, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    appeals: Mapped[list["Appeal"]] = relationship(
+        "Appeal",
+        back_populates="tender",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
     created_by_user: Mapped["User | None"] = relationship(
         "User",
         back_populates="tenders",

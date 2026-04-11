@@ -36,7 +36,12 @@ from app.schemas.enterprise_schemas import (
     TenderTriageRequest,
     TenderTriageResponse,
 )
+from app.schemas.drafting_schemas import (
+    DraftProposalResponse,
+    ProposalDraftRequest,
+)
 from app.services.cv_formatter import format_cv_for_tender
+from app.services.drafting_service import draft_proposal_from_past_wins
 from app.utils.audit_logger import ActionType, log_event
 from app.utils.file_parser import extract_text_from_pdf
 
@@ -527,5 +532,91 @@ async def list_enterprise_endpoints():
                 "method": "POST",
                 "description": "Format employee CV for a specific tender",
             },
+            {
+                "path": "/enterprise/draft-proposal",
+                "method": "POST",
+                "description": "Draft proposal using RAG from past winning bids",
+            },
         ]
     }
+
+
+# =============================================================================
+# RAG Bid Drafting (Enterprise Side Feature)
+# =============================================================================
+
+
+@router.post(
+    "/draft-proposal",
+    response_model=DraftProposalResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Draft proposal using RAG from past winning bids",
+    responses={
+        200: {"description": "Proposal drafted successfully"},
+        404: {"description": "Tender not found"},
+        422: {"description": "Insufficient past bids or drafting failed"},
+    },
+)
+async def draft_proposal(
+    request: ProposalDraftRequest,
+    db: AsyncSession = Depends(get_db),
+) -> DraftProposalResponse:
+    """
+    Draft a proposal using Retrieval-Augmented Generation (RAG) from past winning bids.
+
+    ## The RAG Autopilot Process:
+
+    1. **Requirement Analysis**: LLM analyzes the new tender requirements
+    2. **Content Retrieval**: Matches requirements to past winning bid content
+    3. **Semantic Mapping**: Identifies which past answers fit new questions
+    4. **Tone Adaptation**: Rewrites content to match buyer's tone and length
+    5. **Gap Identification**: Flags requirements not covered by past content
+
+    ## Use Cases:
+
+    - **Similar Requirements**: "Cloud migration" experience → new "AWS migration" tender
+    - **Tone Matching**: Formal government tender → formal proposal language
+    - **Length Compliance**: 10-page past content → 5-page limit (condense)
+    - **Section Reuse**: Past "methodology" section → new tender methodology
+
+    ## Request Body:
+
+    - **tender_id**: ID of the tender to draft for
+    - **past_winning_bids**: Snippets from 1-20 past winning bids (required)
+    - **max_pages**: Target page count (default: 5)
+    - **tone_requirements**: "Formal", "casual", "technical", "business"
+    - **focus_areas**: Specific themes to emphasize
+
+    ## Response:
+
+    - **draft**: Structured proposal with sections and citations
+    - **coverage_score**: How well requirements are covered (0-100)
+    - **gaps**: Requirements not well covered by past content
+    - **new_content_percentage**: Portion requiring original writing
+    """
+    import time
+
+    start_time = time.time()
+
+    # Call drafting service
+    result = await draft_proposal_from_past_wins(db, request)
+
+    processing_time_ms = int((time.time() - start_time) * 1000)
+
+    if not result.success:
+        return DraftProposalResponse(
+            success=False,
+            tender_id=request.tender_id,
+            draft=None,
+            message=result.message,
+            processing_time_ms=processing_time_ms,
+            error_code=result.error_code,
+        )
+
+    return DraftProposalResponse(
+        success=True,
+        tender_id=request.tender_id,
+        draft=result.draft,
+        message=result.message,
+        processing_time_ms=processing_time_ms,
+    )

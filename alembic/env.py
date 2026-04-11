@@ -36,11 +36,14 @@ if database_url:
     # "postgresql+psycopg2://...". We convert only when running offline migrations.
     config.set_main_option("sqlalchemy.url", database_url)
 
-# ── Import your SQLAlchemy models here so Alembic sees them ──────────────────
-# TODO (Milestone 1): Uncomment after db/models.py is implemented:
-# from app.db.base import Base          # noqa: F401 — imports all models
-# target_metadata = Base.metadata
-target_metadata = None   # Stub — replace in Milestone 1
+# ── Import all SQLAlchemy models so Alembic detects schema changes ───────────
+# All models are re-exported from app.db.models.__init__, which imports
+# Base and every table class in correct dependency order.
+from app.db.base import Base        # noqa: F401
+from app.db.models import (         # noqa: F401
+    User, Tender, Offer, AuditLog   # ensures all tables are in metadata
+)
+target_metadata = Base.metadata
 
 
 # ── Offline migrations (generates SQL without a live DB connection) ───────────

@@ -22,8 +22,8 @@ from app.db.models.offer import Offer, OfferStatus
 # Audit log (references Offer)
 from app.db.models.audit_log import AuditLog
 
-# Evaluation (references Offer)
-from app.db.models.evaluation import Evaluation, EvaluationStatus
+# Appeal (references Tender and Offer)
+from app.db.models.appeal import Appeal, AppealStatus
 
 
 __all__ = [
@@ -40,7 +40,7 @@ __all__ = [
     "OfferStatus",
     # Audit
     "AuditLog",
-    # Evaluation
-    "Evaluation",
-    "EvaluationStatus",
+    # Appeal
+    "Appeal",
+    "AppealStatus",
 ]

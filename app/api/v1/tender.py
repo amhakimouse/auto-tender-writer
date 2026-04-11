@@ -34,6 +34,9 @@ from app.schemas.tender import (
     TenderResponse,
 )
 from app.utils.audit_logger import ActionType, log_event
+from app.schemas.offer import OfferListResponse, OfferResponse, OfferFileInfo, FileHashAlgorithm
+from app.db.models import Offer
+from app.db.models.offer import OfferStatus
 
 router = APIRouter()
 
@@ -319,3 +322,77 @@ async def close_tender(
     await db.commit()
 
     return TenderResponse.model_validate(tender)
+
+
+@router.get(
+    "/{tender_id}/offers",
+    response_model=OfferListResponse,
+    summary="List all offers for a tender",
+)
+async def list_tender_offers(
+    tender_id: int,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    status: OfferStatus | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> OfferListResponse:
+    """
+    List offers for a specific tender with optional filtering.
+
+    ## Query Parameters:
+        - skip: Number of records to skip
+        - limit: Maximum records to return (1-100, default 20)
+        - status: Filter by status (e.g. RECEIVED, EVALUATED)
+    """
+    # First verify tender exists
+    tender_result = await db.execute(select(Tender).where(Tender.id == tender_id))
+    if tender_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=404, detail=f"Tender {tender_id} not found"
+        )
+
+    query = select(Offer).where(Offer.tender_id == tender_id)
+
+    if status:
+        query = query.where(Offer.status == status)
+
+    query = query.order_by(Offer.submitted_at.desc()).offset(skip).limit(limit)
+
+    result = await db.execute(query)
+    offers = result.scalars().all()
+
+    # Get total count for pagination
+    count_query = select(Offer).where(Offer.tender_id == tender_id)
+    if status:
+        count_query = count_query.where(Offer.status == status)
+        
+    count_result = await db.execute(count_query)
+    total = len(count_result.scalars().all())
+
+    # Map offers to OfferResponse format
+    response_items = []
+    for o in offers:
+        file_info = OfferFileInfo(
+            original_filename=o.original_filename,
+            hash_algorithm=FileHashAlgorithm.SHA256,
+            hash_hex=o.file_hash_sha256,
+            size_bytes=None,  # We don't store size currently
+        )
+        response_items.append(
+            OfferResponse(
+                id=o.id,
+                tender_id=o.tender_id,
+                bidder_name=o.bidder_name,
+                bidder_email=o.bidder_email,
+                status=o.status,
+                submitted_at=o.submitted_at,
+                file_info=file_info,
+            )
+        )
+
+    return OfferListResponse(
+        items=response_items,
+        total=total,
+        page=skip // limit + 1 if limit > 0 else 1,
+        page_size=limit,
+    )

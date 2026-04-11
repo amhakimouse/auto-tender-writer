@@ -124,6 +124,14 @@ class OfferResponse(BaseModel):
     file_info: OfferFileInfo
 
 
+class OfferListResponse(BaseModel):
+    """Paginated list of offers."""
+    items: list[OfferResponse]
+    total: int
+    page: int
+    page_size: int
+
+
 class OfferUploadResponse(OfferResponse):
     """
         Response returned after successful offer upload.

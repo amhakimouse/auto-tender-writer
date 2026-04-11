@@ -178,7 +178,7 @@ class TechnicalScore(BaseModel):
     # --- Individual Criterion Scores ---
     criteria_scores: list[CriterionScore] = Field(
         ...,
-        min_length=1,
+        min_length=0,   # 0 allows the empty-fallback factory; real LLM output will have ≥1
         max_length=20,
         description="Scores for each criterion in the evaluation rubric",
     )
@@ -331,12 +331,12 @@ def create_empty_compliance_result() -> ComplianceChecklist:
 
 
 def create_empty_technical_score() -> TechnicalScore:
-    """Factory for empty technical score (zero score)."""
+    """Factory for empty technical score (error fallback — all zeros)."""
     return TechnicalScore(
-        criteria_scores=[],
-        overall_summary="Scoring failed - fallback to empty result",
+        criteria_scores=[],          # allowed by min_length=0
+        overall_summary="Scoring failed — fallback to empty result (extraction error).",
         key_strengths=[],
         key_weaknesses=[],
         scoring_confidence=ComplianceConfidence.LOW,
-        scoring_notes="Extraction error occurred",
+        scoring_notes="An error occurred during LLM scoring; this is a safe fallback.",
     )

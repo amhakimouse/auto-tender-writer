@@ -58,13 +58,46 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+from app.core.security import decode_access_token
+from app.db.models.user import User
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
     """
     Decode the Bearer JWT and return the active user record.
-
-    TODO (Milestone 4): Decode with python-jose, look up user in DB.
     """
-    raise NotImplementedError("Auth not yet implemented — coming in Milestone 4.")
+    from jose import JWTError
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = decode_access_token(token)
+        email: str | None = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    from sqlalchemy import select
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    
+    if user is None:
+        raise credentials_exception
+        
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user account",
+        )
+        
+    return user
 
 
 def require_role(*allowed_roles: str):
@@ -72,9 +105,7 @@ def require_role(*allowed_roles: str):
     Dependency factory that restricts an endpoint to specific roles.
 
     Usage:
-        @router.post("/award", dependencies=[Depends(require_role("committee_chair"))])
-
-    TODO (Milestone 4): Integrate with get_current_user().
+        @router.post("/award", dependencies=[Depends(require_role("COMMITTEE_CHAIR"))])
     """
 
     async def role_guard(current_user=Depends(get_current_user)):

@@ -32,7 +32,7 @@ class OfferStatus(StrEnum):
     """
         Workflow states for an Offer.
 
-    n    RECEIVED          → Initial state, file hash computed, pending compliance
+        RECEIVED          → Initial state, file hash computed, pending compliance
         REJECTED_LATE     → Dead-letter: arrived after tender.deadline
         COMPLIANCE_PENDING→ Awaiting administrative checklist validation
         COMPLIANT         → Passed Phase 2 checks, eligible for scoring
@@ -66,7 +66,7 @@ class Offer(Base, TimestampMixin):
     """
         Represents a single bid/submission received from a vendor.
 
-    n    Attributes:
+        Attributes:
             id: Primary key
             tender_id: FK to the Tender this is a response to
             bidder_name: Name of the submitting organization
@@ -155,11 +155,11 @@ class Offer(Base, TimestampMixin):
         back_populates="offer",
         lazy="selectin",
     )
-    evaluations: Mapped[list["Evaluation"]] = relationship(
-        "Evaluation",
+    appeals: Mapped[list["Appeal"]] = relationship(
+        "Appeal",
         back_populates="offer",
-        lazy="selectin",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:
